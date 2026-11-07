@@ -109,3 +109,4 @@ def search_users(request: Request, q: str = ""):
         conn.close()
 
     return templates.TemplateResponse("admin_users.html", {"request": request, "user": user, "users": users, "q": q})
+asdf
