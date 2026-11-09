@@ -1,6 +1,4 @@
-from http.client import HTTPException
-
-from fastapi import APIRouter, Request, Form
+from fastapi import APIRouter, Request, Form, HTTPException
 from fastapi.responses import RedirectResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
 from app.database import run_query, get_conn
@@ -13,6 +11,8 @@ templates = Jinja2Templates(directory="app/templates")
 @router.get("/admin", response_class=HTMLResponse)
 def admin_home(request: Request):
     user = get_user_from_session(request)
+
+    print("CURRENT USER:", user["email"], user["role"])
     if not user:
         return RedirectResponse("/login", status_code=302)
     if user["role"] not in ["admin", "teacher", "ta"]:
@@ -34,8 +34,15 @@ def admin_home(request: Request):
 @router.get("/admin/users", response_class=HTMLResponse)
 def admin_users(request: Request):
     user = get_user_from_session(request)
+    print("CURRENT USER:", user["email"], user["role"])
+
     if not user:
         return RedirectResponse("/login", status_code=302)
+
+    if user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Access denied")
+   
+    
     users = run_query("SELECT id, email, full_name, role FROM users ORDER BY id", fetchall=True)
     return templates.TemplateResponse("admin_users.html", {"request": request, "user": user, "users": users})
 
@@ -43,11 +50,13 @@ def admin_users(request: Request):
 @router.post("/admin/users/{user_id}/role")
 def update_role(request: Request, user_id: int, role: str = Form(...)):
     user = get_user_from_session(request)
+    print("CURRENT USER:", user["email"], user["role"])
     if not user:
         return RedirectResponse("/login", status_code=302)
-    if user.role != "admin":
-        raise HTTPException(status_code=403, detail="Access denied")
 
+    if user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Access denied")
+    
     allowed_roles = ["admin", "teacher", "ta", "student"]
 
     if role not in allowed_roles:
@@ -65,8 +74,12 @@ def update_role(request: Request, user_id: int, role: str = Form(...)):
 @router.get("/admin/grades", response_class=HTMLResponse)
 def admin_grades(request: Request):
     user = get_user_from_session(request)
+    print("CURRENT USER:", user["email"], user["role"])
+
     if not user:
         return RedirectResponse("/login", status_code=302)
+    if user["role"] != "admin":
+            raise HTTPException(status_code=403, detail="Access denied")
 
     grades = run_query(
         """
@@ -90,10 +103,11 @@ def update_grade(
     role: str = Form("student"),
 ):
     user = get_user_from_session(request)
+    print("CURRENT USER:", user["email"], user["role"])
     if not user:
         return RedirectResponse("/login", status_code=302)
 
-    if role in ["admin", "teacher", "ta"]:
+    if user["role"] in ["admin", "teacher", "ta"]:
         run_query(
             "UPDATE grades SET grade_value=%s, feedback=%s, status='published' WHERE id=%s",
             (grade_value, feedback, grade_id),
@@ -106,6 +120,7 @@ def update_grade(
 @router.get("/admin/search-users", response_class=HTMLResponse)
 def search_users(request: Request, q: str = ""):
     user = get_user_from_session(request)
+    print("CURRENT USER:", user["email"], user["role"])
     if not user:
         return RedirectResponse("/login", status_code=302)
 
