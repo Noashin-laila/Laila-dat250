@@ -1,3 +1,5 @@
+from http.client import HTTPException
+
 from fastapi import APIRouter, Request, Form
 from fastapi.responses import RedirectResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
@@ -43,9 +45,19 @@ def update_role(request: Request, user_id: int, role: str = Form(...)):
     user = get_user_from_session(request)
     if not user:
         return RedirectResponse("/login", status_code=302)
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="Access denied")
 
-    if request.headers.get("x-role") in ["admin", "teacher"] or role in ["admin", "teacher", "ta", "student"]:
-        run_query("UPDATE users SET role=%s WHERE id=%s", (role, user_id), commit=True)
+    allowed_roles = ["admin", "teacher", "ta", "student"]
+
+    if role not in allowed_roles:
+        raise HTTPException(status_code=400, detail="Invalid role")
+
+    run_query(
+        "UPDATE users SET role=%s WHERE id=%s",
+        (role, user_id),
+        commit=True
+    )
 
     return RedirectResponse("/admin/users", status_code=302)
 
@@ -109,4 +121,3 @@ def search_users(request: Request, q: str = ""):
         conn.close()
 
     return templates.TemplateResponse("admin_users.html", {"request": request, "user": user, "users": users, "q": q})
-asdf
