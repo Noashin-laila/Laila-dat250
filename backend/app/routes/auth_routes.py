@@ -1,4 +1,5 @@
-import time
+import secrets
+from datetime import datetime, timedelta
 from fastapi import APIRouter, Request, Form
 from fastapi.responses import RedirectResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
@@ -86,40 +87,91 @@ def reset_password_request(request: Request, email: str = Form(...)):
             {"request": request, "mode": "request", "message": "No user found with that email."},
         )
 
-    token = str(int(time.time()))[-6:]
     run_query(
-        "INSERT INTO password_reset_tokens (user_id, token) VALUES (%s, %s)",
-        (user["id"], token),
+        "DELETE FROM password_reset_tokens WHERE user_id=%s",
+        (user["id"],),
         commit=True,
     )
+
+
+    token = secrets.token_urlsafe(16)
+
+    expires_at = datetime.utcnow() + timedelta(minutes=30)
+
+    run_query(
+        """
+        INSERT INTO password_reset_tokens
+        (user_id, token, expires_at)
+        VALUES (%s, %s, %s)
+        """,
+        (user["id"], token, expires_at),
+        commit=True,
+    )
+
     send_reset_email(email, token)
+
     return templates.TemplateResponse(
         "reset_password.html",
-        {"request": request, "mode": "request", "message": f"Reset email sent to {email}."},
+        {
+            "request": request,
+            "mode": "request",
+            "message": f"Reset email sent to {email}."
+        },
     )
 
 
 @router.get("/reset-password/{token}", response_class=HTMLResponse)
 def reset_password_token_page(request: Request, token: str):
+    token_row = run_query(
+        "SELECT * FROM password_reset_tokens WHERE token=%s ORDER BY created_at DESC LIMIT 1",
+        (token,),
+        fetchone=True,
+    )
+    if not token_row or token_row["expires_at"] < datetime.utcnow():
+        return templates.TemplateResponse(
+            "reset_password.html",
+            {"request": request, "mode": "set", "token": token, "message": "Invalid or expired token."},
+        )
     return templates.TemplateResponse("reset_password.html", {"request": request, "mode": "set", "token": token, "message": None})
 
 
 @router.post("/reset-password/{token}", response_class=HTMLResponse)
-def reset_password_token(request: Request, token: str, new_password: str = Form(...)):
+def reset_password_token(
+    request: Request,
+    token: str,
+    new_password: str = Form(...)
+        ):
+
     token_row = run_query(
-        "SELECT * FROM password_reset_tokens WHERE token=%s ORDER BY created_at DESC LIMIT 1",
+        """
+        SELECT *
+        FROM password_reset_tokens
+        WHERE token=%s
+          AND expires_at > NOW()
+        """,
         (token,),
         fetchone=True,
     )
     if not token_row:
         return templates.TemplateResponse(
             "reset_password.html",
-            {"request": request, "mode": "set", "token": token, "message": "Invalid token"},
+            {
+                "request": request,
+                "mode": "set",
+                "token": token,
+                "message": "Invalid or expired token."
+            },
         )
 
     run_query(
-        "UPDATE users SET password_hash=%s WHERE id=%s",
-        (hash_password(new_password), token_row["user_id"]),
-        commit=True,
+       "UPDATE users SET password_hash=%s WHERE id=%s",
+    (hash_password(new_password), token_row["user_id"]),
+    commit=True,
     )
+
+    run_query(
+    "DELETE FROM password_reset_tokens WHERE token=%s",
+    (token,),
+    commit=True,
+     )
     return RedirectResponse("/login", status_code=302)
