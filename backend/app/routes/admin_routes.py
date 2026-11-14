@@ -15,7 +15,7 @@ def admin_home(request: Request):
     print("CURRENT USER:", user["email"], user["role"])
     if not user:
         return RedirectResponse("/login", status_code=302)
-    if user["role"] not in ["admin", "teacher", "ta"]:
+    if user["role"] != ["admin", "teacher", "ta"]:
         return RedirectResponse("/dashboard", status_code=302)
 
     users_count = run_query("SELECT COUNT(*) as c FROM users", fetchone=True)
