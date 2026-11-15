@@ -46,7 +46,6 @@ def admin_users(request: Request):
     users = run_query("SELECT id, email, full_name, role FROM users ORDER BY id", fetchall=True)
     return templates.TemplateResponse("admin_users.html", {"request": request, "user": user, "users": users})
 
-
 @router.post("/admin/users/{user_id}/role")
 def update_role(request: Request, user_id: int, role: str = Form(...)):
     user = get_user_from_session(request)
@@ -120,19 +119,31 @@ def update_grade(
 @router.get("/admin/search-users", response_class=HTMLResponse)
 def search_users(request: Request, q: str = ""):
     user = get_user_from_session(request)
-    print("CURRENT USER:", user["email"], user["role"])
+    
     if not user:
         return RedirectResponse("/login", status_code=302)
 
-    sql = f"SELECT id, email, full_name, role FROM users WHERE email ILIKE '%{q}%' OR full_name ILIKE '%{q}%'"
+    sql = """SELECT id, email, full_name, role FROM users WHERE email ILIKE %s OR full_name ILIKE %s"""
+    search_term = f"%{q}%"
     conn = get_conn()
+
     try:
         with conn.cursor() as cur:
-            cur.execute(sql)
+            cur.execute(sql, (search_term, search_term))
             rows = cur.fetchall()
+
             cols = [d[0] for d in cur.description]
             users = [dict(zip(cols, r)) for r in rows]
+
     finally:
         conn.close()
 
-    return templates.TemplateResponse("admin_users.html", {"request": request, "user": user, "users": users, "q": q})
+    return templates.TemplateResponse(
+        "admin_users.html",
+        {
+            "request": request,
+            "user": user,
+            "users": users,
+            "q": q,
+        },
+    )
