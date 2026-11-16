@@ -21,9 +21,22 @@ CREATE TABLE IF NOT EXISTS sessions (
 CREATE TABLE IF NOT EXISTS password_reset_tokens (
   id SERIAL PRIMARY KEY,
   user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-  token VARCHAR(64) NOT NULL,
+  token TEXT UNIQUE NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+ 
 );
+
+ALTER TABLE password_reset_tokens
+ADD COLUMN expires_at TIMESTAMP;
+
+UPDATE password_reset_tokens
+SET expires_at = created_at + INTERVAL '30 minutes'
+WHERE expires_at IS NULL;
+
+ALTER TABLE password_reset_tokens
+ADD CONSTRAINT unique_reset_token UNIQUE (token);
+
+
 
 CREATE TABLE IF NOT EXISTS courses (
   id SERIAL PRIMARY KEY,
