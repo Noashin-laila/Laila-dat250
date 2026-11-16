@@ -97,3 +97,5 @@ def upload_avatar(request: Request, avatar: UploadFile = File(...)):
 
     run_query("UPDATE users SET avatar_path=%s WHERE id=%s", (filename, user["id"]), commit=True)
     return RedirectResponse(f"/profile/{user['id']}", status_code=302)
+
+
